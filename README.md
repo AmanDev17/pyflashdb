@@ -1,333 +1,222 @@
-#  Flash — Unified Database Interface
+<div align="center">
 
-Flash is a lightweight Python library that gives you one clean API for **MySQL**, **PostgreSQL**, and **MongoDB** — with built-in trigger hooks, no models required.
+<br/>
+
+# ⚡ pyflashdb
+
+**Stop writing database code three times.**
+
+[![PyPI](https://img.shields.io/badge/pypi-v1.0.4-E94560?style=flat-square\&logo=pypi\&logoColor=white)](https://pypi.org/project/pyflashdb/)
+[![Python](https://img.shields.io/badge/python-3.8%2B-3776AB?style=flat-square\&logo=python\&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-10B981?style=flat-square)](LICENSE)
+[![MySQL](https://img.shields.io/badge/MySQL-supported-00758F?style=flat-square\&logo=mysql\&logoColor=white)](https://www.mysql.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-supported-336791?style=flat-square\&logo=postgresql\&logoColor=white)](https://www.postgresql.org/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-supported-3D8B37?style=flat-square\&logo=mongodb\&logoColor=white)](https://www.mongodb.com/)
+
+<br/>
+
+</div>
+
+---
+
+## What is pyflashdb?
+
+pyflashdb is a Python library that lets you talk to **MySQL**, **PostgreSQL**, and **MongoDB** using the exact same code.
+
+You write one line. It works on all three databases. No SQL knowledge required. No driver switching. No boilerplate.
 
 ```python
 from flash import FlashDB
 
-flash = FlashDB("mysql", config)
-flash.add("users", {"name": "John", "age": 25})
-flash.where("users", {"age": {">": 18}})
+flash = FlashDB("mysql", config)   # change to "postgres" or "mongodb" — nothing else changes
+
+flash.add("users", {"name": "Alice", "age": 25})      # insert
+flash.where("users", {"age": {">": 18}})              # filter
+flash.update("users", {"name": "Alice"}, {"age": 26}) # update
+flash.delete("users", {"name": "Alice"})              # delete
 ```
+
+That's it. Same four lines work on MySQL, PostgreSQL, and MongoDB.
 
 ---
 
-## 📦 Installation
+## The Problem It Solves
+
+Most projects start with one database and grow to need another. Or your team uses MySQL locally but PostgreSQL in production. Or you want MongoDB for one feature and SQL for another.
+
+Every time you switch databases, you rewrite your query code — because each database has a completely different API.
+
+**Without pyflashdb — three different APIs to learn and maintain:**
+
+```python
+# MySQL
+cursor.execute("INSERT INTO users (name, age) VALUES (%s, %s)", ("Alice", 25))
+conn.commit()
+
+# PostgreSQL — different driver, slightly different syntax
+cursor.execute('INSERT INTO "users" (name, age) VALUES (%s, %s) RETURNING id', ("Alice", 25))
+
+# MongoDB — completely different world
+db["users"].insert_one({"name": "Alice", "age": 25})
+```
+
+**With pyflashdb — one line, any database:**
+
+```python
+flash.add("users", {"name": "Alice", "age": 25})
+```
+
+Switch your database by changing one word. Your application code stays exactly the same.
+
+---
+
+## Install
 
 ```bash
-pip install flashdb
-
-# With specific driver:
-pip install flashdb[mysql]      # MySQL
-pip install flashdb[postgres]   # PostgreSQL
-pip install flashdb[mongodb]    # MongoDB
-pip install flashdb[all]        # All drivers
+# Pick the database you use
+pip install pyflashdb[mysql]      # MySQL
+pip install pyflashdb[postgres]   # PostgreSQL
+pip install pyflashdb[mongodb]    # MongoDB
+pip install pyflashdb[all]        # All three
 ```
 
 ---
 
-## 🔌 Connection
+## Quick Example — A Complete User System in 20 Lines
 
-### MySQL
 ```python
 from flash import FlashDB
 
+# Connect — swap "mysql" for "postgres" or "mongodb" to change databases
 flash = FlashDB("mysql", {
-    "host": "localhost",
-    "port": 3306,
-    "user": "root",
-    "password": "1234",
-    "database": "mydb"
+    "host":     "localhost",
+    "user":     "root",
+    "password": "your_password",
+    "database": "myapp"
 })
-```
 
-### PostgreSQL
-```python
-flash = FlashDB("postgres", {
-    "host": "localhost",
-    "port": 5432,
-    "user": "postgres",
-    "password": "1234",
-    "database": "mydb"
+# Create the table
+flash.create_table("users", {
+    "id":    "int",
+    "name":  "str",
+    "email": "str",
+    "age":   "int",
 })
-```
 
-### MongoDB
-```python
-flash = FlashDB("mongodb", {
-    "host": "localhost",
-    "port": 27017,
-    "database": "mydb"
-    # Or use: "uri": "mongodb+srv://..."
-})
-```
+# Insert
+flash.add("users", {"name": "Alice", "email": "alice@example.com", "age": 25})
+flash.add("users", {"name": "Bob",   "email": "bob@example.com",   "age": 17})
 
-### Context Manager
-```python
-with FlashDB("mysql", config) as flash:
-    flash.add("users", {"name": "John"})
-# Connection auto-closed
+# Read
+all_users  = flash.all("users")                          # everyone
+adults     = flash.where("users", {"age": {">": 18}})   # filtered
+one_user   = flash.find_one("users", {"name": "Alice"}) # single record
+page       = flash.paginate("users", page=1, size=10)   # paginated
+
+# Update
+flash.update("users", {"name": "Alice"}, {"age": 26})
+
+# Delete
+flash.delete("users", {"name": "Bob"})
+
+flash.close()
 ```
 
 ---
 
-## 🧩 CRUD Operations
+## Core Features
 
-### ➕ Insert
+### Everything you need for database work
 
-```python
-# Single record
-flash.add("users", {"name": "Alice", "age": 22})
+| Feature                     | What it does                                              |
+| --------------------------- | --------------------------------------------------------- |
+| `add()`                     | Insert one record, returns the new ID                     |
+| `bulk_insert()`             | Insert many records in one call                           |
+| `all()`                     | Fetch every record from a table                           |
+| `where()`                   | Fetch records matching a filter                           |
+| `select()`                  | Full query — filter, sort, limit, offset, specific fields |
+| `find_one()`                | Get the first match, or None                              |
+| `count()`                   | Count records without fetching them                       |
+| `paginate()`                | Built-in pagination with total count                      |
+| `update()`                  | Update matching records                                   |
+| `delete()`                  | Delete matching records                                   |
+| `create_table()`            | Create a table or collection                              |
+| `drop_table()`              | Drop a table or collection                                |
+| `truncate()`                | Clear all rows, keep the structure                        |
+| `raw()`                     | Run a raw SQL query or MongoDB command                    |
+| `begin / commit / rollback` | Full transaction support                                  |
 
-# Bulk insert
-flash.bulk_insert("users", [
-    {"name": "Alice", "age": 22},
-    {"name": "Bob", "age": 30},
-])
-```
-
-### 📖 Read
-
-```python
-# All records
-flash.all("users")
-
-# With filters
-flash.where("users", {"name": "Alice"})
-flash.where("users", {"age": {">": 18}})
-
-# Specific fields
-flash.select("users", fields=["name", "age"])
-
-# Combined
-flash.select("users",
-    fields=["name", "age"],
-    filters={"age": {">": 18}},
-    order_by="age",
-    limit=10
-)
-
-# Single record
-flash.find_one("users", {"name": "Alice"})
-
-# Count
-flash.count("users", {"age": {">": 18}})
-
-# Limit
-flash.limit("users", 5)
-
-# Paginate
-flash.paginate("users", page=2, size=10)
-# Returns: {"data": [...], "page": 2, "size": 10, "total": 42}
-```
-
-### ✏️ Update
-
-```python
-flash.update("users", {"name": "Alice"}, {"age": 23})
-```
-
-### 🗑️ Delete
-
-```python
-flash.delete("users", {"name": "Alice"})
-```
-
----
-
-## 🔍 Filter Operators
-
-Flash uses a unified filter syntax that automatically translates to SQL or MongoDB:
-
-| Flash Operator | SQL       | MongoDB  |
-|---------------|-----------|----------|
-| `>`           | `>`       | `$gt`    |
-| `<`           | `<`       | `$lt`    |
-| `>=`          | `>=`      | `$gte`   |
-| `<=`          | `<=`      | `$lte`   |
-| `!=`          | `!=`      | `$ne`    |
-| `in`          | `IN`      | `$in`    |
-| `not in`      | `NOT IN`  | `$nin`   |
-| `like`        | `LIKE`    | `$regex` |
+### Smart filter syntax — write once, works everywhere
 
 ```python
 flash.where("users", {"age": {">": 18}})
+flash.where("users", {"age": {">=": 18, "<=": 65}})
 flash.where("users", {"role": {"in": ["admin", "mod"]}})
-flash.where("users", {"name": {"like": "Jo%"}})
-flash.where("users", {"score": {">=": 80, "<=": 100}})
+flash.where("users", {"email": {"like": "%@gmail.com"}})
+flash.where("users", {"status": {"!=": "banned"}})
 ```
 
 ---
 
-## 🔔 Trigger Hooks
-
-Flash supports before/after hooks for all operations — even on MongoDB where native triggers don't exist.
-
-### Decorator Style
+## Trigger hooks — observe any operation
 
 ```python
 @flash.before_insert("users")
 def validate(data):
-    if not data.get("name"):
-        raise ValueError("Name is required")
+    if not data.get("email"):
+        raise ValueError("Email is required")
 
 @flash.after_insert("users")
 def on_created(data, result):
-    print(f"New user created with ID: {result}")
+    print(f"New user created — ID: {result}")
 
-@flash.before_update("users")
-def log_update(payload):
-    print("Updating:", payload["filters"], "->", payload["data"])
-
-@flash.after_delete("users")
+@flash.after_delete("orders")
 def on_deleted(filters, count):
-    print(f"Deleted {count} record(s)")
-```
-
-### Programmatic Style
-
-```python
-def audit_log(data):
-    print("Insert:", data)
-
-flash.add_hook("before", "insert", "users", audit_log)
-```
-
-### Available Hooks
-
-| Hook                         | When it fires                  |
-|-----------------------------|--------------------------------|
-| `before_insert(table)`      | Before `add()` or `bulk_insert()`  |
-| `after_insert(table)`       | After `add()` or `bulk_insert()`   |
-| `before_update(table)`      | Before `update()`              |
-| `after_update(table)`       | After `update()`               |
-| `before_delete(table)`      | Before `delete()`              |
-| `after_delete(table)`       | After `delete()`               |
-| `before_select(table)`      | Before `all()`, `select()`, `where()` |
-| `after_select(table)`       | After any read operation       |
-
-### Manage Hooks
-
-```python
-flash.list_hooks()          # See all registered hooks
-flash.clear_hooks()         # Remove all hooks
-flash.clear_hooks("users")  # Remove hooks for one table
+    print(f"Deleted {count} order(s)")
 ```
 
 ---
 
-## 📄 Schema Operations
-
-```python
-# Create table/collection
-flash.create_table("users", {
-    "id": "int",
-    "name": "str",
-    "email": "str",
-    "age": "int",
-    "score": "float"
-})
-
-# Drop table
-flash.drop_table("users")
-
-# Truncate (keep structure, delete data)
-flash.truncate("users")
-
-# List tables
-flash.show_tables()
-
-# Describe structure
-flash.describe("users")
-```
-
-### Supported Type Strings
-
-| Flash Type | MySQL          | PostgreSQL     |
-|-----------|----------------|----------------|
-| `int`     | INT            | INTEGER        |
-| `str`     | VARCHAR(255)   | VARCHAR(255)   |
-| `text`    | TEXT           | TEXT           |
-| `float`   | FLOAT          | REAL           |
-| `bool`    | TINYINT(1)     | BOOLEAN        |
-| `date`    | DATE           | DATE           |
-| `datetime`| DATETIME       | TIMESTAMP      |
-| `json`    | JSON           | JSONB          |
-
----
-
-## 🔐 Transactions (SQL)
+## Transactions — atomic operations
 
 ```python
 flash.begin()
 try:
-    flash.add("accounts", {"user": "Alice", "balance": 500})
-    flash.update("accounts", {"user": "Bob"}, {"balance": 100})
+    flash.update("accounts", {"user_id": 1}, {"balance": 400})
+    flash.update("accounts", {"user_id": 2}, {"balance": 600})
     flash.commit()
-except Exception:
+except Exception as e:
     flash.rollback()
 ```
 
 ---
 
-## 🧰 Raw Queries
+## How pyflashdb Compares
 
-```python
-# SQL
-flash.raw("SELECT * FROM users WHERE age > %s", [18])
-
-# MongoDB (pass raw filter dict)
-flash.raw({"age": {"$gt": 18}}, table="users")
-```
-
----
-
-## 🍃 MongoDB-Specific
-
-```python
-# Aggregation pipeline
-flash.aggregate("orders", [
-    {"$match": {"status": "paid"}},
-    {"$group": {"_id": "$user_id", "total": {"$sum": "$amount"}}},
-    {"$sort": {"total": -1}}
-])
-
-# Create index
-flash.create_index("users", "email", unique=True)
-```
+|                         | pyflashdb | SQLAlchemy | Django ORM | Raw drivers |
+| ----------------------- | :-------: | :--------: | :--------: | :---------: |
+| Works on MySQL          |     ✅     |      ✅     |      ✅     |      ✅      |
+| Works on PostgreSQL     |     ✅     |      ✅     |      ✅     |      ✅      |
+| Works on MongoDB        |     ✅     |      ❌     |      ❌     |      ✅      |
+| Same API across all DBs |     ✅     |      ❌     |      ❌     |      ❌      |
 
 ---
 
-## 🔧 Utilities
+## Links
 
-```python
-flash.ping()    # True if connection is alive
-flash.close()   # Close connection
-```
+* **PyPI:** https://pypi.org/project/pyflashdb/
+* **Issues:** https://github.com/AmanDev17/pyflashdb/issues
 
 ---
 
-## 📁 Project Structure
+## Documentation
 
-```
-flash/
-├── flash/
-│   ├── __init__.py         # Package entry point
-│   ├── core.py             # FlashDB main class
-│   ├── filters.py          # Filter/query translation
-│   ├── triggers.py         # Hook/trigger system
-│   ├── exceptions.py       # Custom exceptions
-│   └── adapters/
-│       ├── __init__.py
-│       ├── mysql_adapter.py
-│       ├── postgres_adapter.py
-│       └── mongo_adapter.py
-├── setup.py
-└── README.md
-```
+📄 [Full Documentation (PDF)](https://github.com/AmanDev17/pyflashdb/blob/main/pyflashdb_v_1.0.4_README.pdf)
 
----
+<div align="center">
 
-## 📜 License
+**pyflashdb v1.0.4** · MIT License · Python 3.8+
 
-MIT © Flash Team
+*One API. Any database. Zero boilerplate.*
+
+</div>

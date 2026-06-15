@@ -1,4 +1,6 @@
 myenv/
 __pycache__/
 *.pyc
-.env
+dist/
+build/
+*.egg-info/

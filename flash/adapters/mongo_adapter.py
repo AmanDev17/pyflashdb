@@ -1,87 +1,96 @@
 """
-MongoDB adapter for Flash.
+pyflashdb — MongoDB adapter.
 Requires: pip install pymongo
 """
 
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 from ..filters import filters_to_mongo
-from ..exceptions import ConnectionError, QueryError
+from ..exceptions import FlashConnectionError, QueryError
 
 
 class MongoAdapter:
     """
-    MongoDB backend adapter for FlashDB.
-    Uses pymongo under the hood.
+    MongoDB backend — uses pymongo.
+    Instantiated automatically by FlashDB when db_type="mongodb".
     """
 
     def __init__(self, config: dict):
-        self.config = config
-        self.client = None
-        self.db = None
+        self.config   = config
+        self.client   = None
+        self.db       = None
+        self._session = None
         self._connect()
+
+    # ── Internal helpers ───────────────────────────────────────────────────
 
     def _connect(self):
         try:
             from pymongo import MongoClient
-            from pymongo.errors import ConnectionFailure
 
-            uri = self.config.get("uri")
+            uri  = self.config.get("uri")
+            user = self.config.get("user")
+            pwd  = self.config.get("password")
+
             if uri:
                 self.client = MongoClient(uri)
+            elif user and pwd:
+                self.client = MongoClient(
+                    host     = self.config.get("host", "localhost"),
+                    port     = self.config.get("port", 27017),
+                    username = user,
+                    password = pwd,
+                )
             else:
-                host = self.config.get("host", "localhost")
-                port = self.config.get("port", 27017)
-                user = self.config.get("user")
-                password = self.config.get("password")
+                self.client = MongoClient(
+                    host = self.config.get("host", "localhost"),
+                    port = self.config.get("port", 27017),
+                )
 
-                if user and password:
-                    self.client = MongoClient(
-                        host=host, port=port, username=user, password=password
-                    )
-                else:
-                    self.client = MongoClient(host=host, port=port)
-
-            db_name = self.config.get("database", "flash_db")
-            self.db = self.client[db_name]
-
-            # Test connection
+            self.db = self.client[self.config.get("database", "flash_db")]
+            # Verify connection
             self.client.admin.command("ping")
 
         except ImportError:
-            raise ConnectionError(
+            raise FlashConnectionError(
                 "pymongo is not installed. Run: pip install pymongo"
             )
         except Exception as e:
-            raise ConnectionError(f"MongoDB connection failed: {e}")
+            raise FlashConnectionError(f"MongoDB connection failed: {e}")
 
     def _col(self, table: str):
-        """Return the pymongo Collection for the given table/collection name."""
+        """Return the pymongo Collection for the given name."""
         return self.db[table]
 
-    def _clean(self, doc) -> dict:
-        """Convert ObjectId to string for clean output."""
+    def _clean(self, doc: dict) -> dict:
+        """Stringify ObjectId so the result is always JSON-serialisable."""
         if doc and "_id" in doc:
+            doc = dict(doc)
             doc["_id"] = str(doc["_id"])
         return doc
 
-    # ── Core CRUD ──────────────────────────────────────────────────────────
+    # ── CRUD ───────────────────────────────────────────────────────────────
 
     def all(self, table: str) -> List[dict]:
         return [self._clean(d) for d in self._col(table).find()]
 
-    def select(self, table: str, fields: List[str] = None, filters: dict = None,
-               limit: int = None, offset: int = None, order_by: str = None) -> List[dict]:
-        query = filters_to_mongo(filters) if filters else {}
+    def select(
+        self,
+        table:    str,
+        fields:   List[str] = None,
+        filters:  dict      = None,
+        limit:    int       = None,
+        offset:   int       = None,
+        order_by: str       = None,
+    ) -> List[dict]:
+        query      = filters_to_mongo(filters) if filters else {}
         projection = {f: 1 for f in fields} if fields else None
 
         cursor = self._col(table).find(query, projection)
 
         if order_by:
-            # Support "field" (asc) or "-field" (desc)
-            if order_by.startswith("-"):
-                cursor = cursor.sort(order_by[1:], -1)
-            else:
-                cursor = cursor.sort(order_by, 1)
+            direction = -1 if order_by.startswith("-") else 1
+            field     = order_by.lstrip("-")
+            cursor    = cursor.sort(field, direction)
 
         if offset:
             cursor = cursor.skip(int(offset))
@@ -90,7 +99,8 @@ class MongoAdapter:
 
         return [self._clean(d) for d in cursor]
 
-    def add(self, table: str, data: dict) -> str:
+    def add(self, table: str, data: dict, primary_key: str = "id") -> str:
+        """Insert one document. Returns the string representation of ObjectId."""
         try:
             result = self._col(table).insert_one(data.copy())
             return str(result.inserted_id)
@@ -122,30 +132,23 @@ class MongoAdapter:
         except Exception as e:
             raise QueryError(f"MongoDB delete failed: {e}")
 
-    # ── Schema / Collection Operations ─────────────────────────────────────
+    # ── Schema / Collections ───────────────────────────────────────────────
 
     def create_table(self, table: str, schema: dict = None, primary_key: str = "id") -> bool:
         """
-        In MongoDB, collections are created implicitly.
-        This optionally applies a JSON Schema validator.
+        MongoDB creates collections implicitly on first insert.
+        If a schema dict is provided, a JSON Schema validator is applied.
         """
         if schema:
-            props = {}
-            for field, typ in schema.items():
-                bson_type = self._py_to_bson(typ)
-                props[field] = {"bsonType": bson_type}
-
-            validator = {
-                "$jsonSchema": {
-                    "bsonType": "object",
-                    "properties": props,
-                }
+            props = {
+                field: {"bsonType": self._py_to_bson(typ)}
+                for field, typ in schema.items()
             }
-            try:
-                self.db.create_collection(table, validator=validator)
-            except Exception:
-                # Collection may already exist; apply collMod instead
+            validator = {"$jsonSchema": {"bsonType": "object", "properties": props}}
+            if table in self.db.list_collection_names():
                 self.db.command("collMod", table, validator=validator)
+            else:
+                self.db.create_collection(table, validator=validator)
         else:
             if table not in self.db.list_collection_names():
                 self.db.create_collection(table)
@@ -163,40 +166,46 @@ class MongoAdapter:
         return self.db.list_collection_names()
 
     def describe(self, table: str) -> dict:
-        """Return collection stats as schema info."""
         return self.db.command("collStats", table)
 
     def create_index(self, table: str, field: str, unique: bool = False) -> str:
         from pymongo import ASCENDING
-        result = self._col(table).create_index([(field, ASCENDING)], unique=unique)
-        return result
+        return self._col(table).create_index([(field, ASCENDING)], unique=unique)
 
-    # ── Transactions (MongoDB 4.0+ with replica set) ───────────────────────
+    # ── Aggregation ────────────────────────────────────────────────────────
+
+    def aggregate(self, table: str, pipeline: list) -> List[dict]:
+        return [self._clean(d) for d in self._col(table).aggregate(pipeline)]
+
+    # ── Transactions (requires replica set, MongoDB 4.0+) ──────────────────
 
     def begin(self):
         self._session = self.client.start_session()
         self._session.start_transaction()
 
     def commit(self):
-        if hasattr(self, "_session"):
+        if self._session:
             self._session.commit_transaction()
             self._session.end_session()
+            self._session = None
 
     def rollback(self):
-        if hasattr(self, "_session"):
+        if self._session:
             self._session.abort_transaction()
             self._session.end_session()
+            self._session = None
 
-    # ── Raw Query ──────────────────────────────────────────────────────────
+    # ── Raw command ────────────────────────────────────────────────────────
 
-    def raw(self, command: dict, table: str = None) -> Any:
+    def raw(self, command, table: str = None) -> Any:
         """
-        Execute a raw MongoDB command.
-        For collection-level ops pass table; otherwise it runs on the DB.
+        Execute a raw MongoDB command or filter.
+        - Pass a dict + table to run a collection-level find.
+        - Pass a string to run a database-level command.
         """
         try:
-            if table:
-                return list(self._col(table).find(command))
+            if table and isinstance(command, dict):
+                return [self._clean(d) for d in self._col(table).find(command)]
             return self.db.command(command)
         except Exception as e:
             raise QueryError(f"MongoDB raw command failed: {e}")
@@ -207,16 +216,14 @@ class MongoAdapter:
         query = filters_to_mongo(filters) if filters else {}
         return self._col(table).count_documents(query)
 
-    # ── Aggregation ────────────────────────────────────────────────────────
-
-    def aggregate(self, table: str, pipeline: list) -> List[dict]:
-        return [self._clean(d) for d in self._col(table).aggregate(pipeline)]
-
     # ── Lifecycle ──────────────────────────────────────────────────────────
 
     def close(self):
-        if self.client:
-            self.client.close()
+        try:
+            if self.client:
+                self.client.close()
+        except Exception:
+            pass
 
     def ping(self) -> bool:
         try:
@@ -225,23 +232,16 @@ class MongoAdapter:
         except Exception:
             return False
 
-    # ── Helpers ────────────────────────────────────────────────────────────
+    # ── Type mapping ───────────────────────────────────────────────────────
 
     def _py_to_bson(self, type_str: str) -> str:
         mapping = {
-            "int": "int",
-            "integer": "int",
-            "str": "string",
-            "string": "string",
-            "text": "string",
-            "float": "double",
-            "double": "double",
-            "bool": "bool",
-            "boolean": "bool",
-            "date": "date",
-            "datetime": "date",
-            "list": "array",
-            "dict": "object",
-            "json": "object",
+            "int":      "int",    "integer":  "int",
+            "str":      "string", "string":   "string", "text": "string",
+            "float":    "double", "double":   "double",
+            "bool":     "bool",   "boolean":  "bool",
+            "date":     "date",   "datetime": "date",   "timestamp": "date",
+            "list":     "array",
+            "dict":     "object", "json":     "object",
         }
         return mapping.get(type_str.lower(), "string")
