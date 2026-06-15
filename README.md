@@ -215,6 +215,22 @@ except Exception as e:
 
 <div align="center">
 
+---
+
+##  Dedication
+
+This project carries a small piece of my life with it.
+
+Inspired by someone who means a lot to me —
+your presence, support, and the way you see the world quietly shaped this journey.
+
+Not everything in code is just logic.
+Some parts come from people who make us better.
+
+— *Aman*
+
+Inspired by Komal 
+
 **pyflashdb v1.0.4** · MIT License · Python 3.8+
 
 *One API. Any database. Zero boilerplate.*
