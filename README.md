@@ -213,26 +213,16 @@ except Exception as e:
 
 📄 [Full Documentation (PDF)](https://github.com/AmanDev17/pyflashdb/blob/main/pyflashdb_v_1.0.4_README.pdf)
 
-<div align="center">
 
 ---
-
-##  Dedication
-
-This project carries a small piece of my life with it.
-
-Inspired by someone who means a lot to me —
-your presence, support, and the way you see the world quietly shaped this journey.
-
-Not everything in code is just logic.
-Some parts come from people who make us better.
-
-— *Aman*
-
-Inspired by Komal 
+<div align="center">
 
 **pyflashdb v1.0.4** · MIT License · Python 3.8+
 
 *One API. Any database. Zero boilerplate.*
 
 </div>
+
+---
+## - Made possible because of Komal 
+
