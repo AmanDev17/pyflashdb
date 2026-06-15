@@ -1,2 +1,284 @@
-# flash
-A lightweight, multi-database Python library that provides simple CRUD operations, unified query syntax, and trigger hooks with minimal setup
+<div align="center">
+
+<br/>
+
+# ⚡ pyflashdb
+
+**Stop writing database code three times.**
+
+[![PyPI](https://img.shields.io/badge/pypi-v1.0.4-E94560?style=flat-square&logo=pypi&logoColor=white)](https://pypi.org/project/pyflashdb/)
+[![Python](https://img.shields.io/badge/python-3.8%2B-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-10B981?style=flat-square)](LICENSE)
+[![MySQL](https://img.shields.io/badge/MySQL-supported-00758F?style=flat-square&logo=mysql&logoColor=white)](https://www.mysql.com/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-supported-336791?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![MongoDB](https://img.shields.io/badge/MongoDB-supported-3D8B37?style=flat-square&logo=mongodb&logoColor=white)](https://www.mongodb.com/)
+
+<br/>
+
+</div>
+
+---
+
+## What is pyflashdb?
+
+pyflashdb is a Python library that lets you talk to **MySQL**, **PostgreSQL**, and **MongoDB** using the exact same code.
+
+You write one line. It works on all three databases. No SQL knowledge required. No driver switching. No boilerplate.
+
+```python
+from flash import FlashDB
+
+flash = FlashDB("mysql", config)   # change to "postgres" or "mongodb" — nothing else changes
+
+flash.add("users", {"name": "Alice", "age": 25})      # insert
+flash.where("users", {"age": {">": 18}})              # filter
+flash.update("users", {"name": "Alice"}, {"age": 26}) # update
+flash.delete("users", {"name": "Alice"})              # delete
+```
+
+That's it. Same four lines work on MySQL, PostgreSQL, and MongoDB.
+
+---
+
+## The Problem It Solves
+
+Most projects start with one database and grow to need another. Or your team uses MySQL locally but PostgreSQL in production. Or you want MongoDB for one feature and SQL for another.
+
+Every time you switch databases, you rewrite your query code — because each database has a completely different API.
+
+**Without pyflashdb — three different APIs to learn and maintain:**
+
+```python
+# MySQL
+cursor.execute("INSERT INTO users (name, age) VALUES (%s, %s)", ("Alice", 25))
+conn.commit()
+
+# PostgreSQL — different driver, slightly different syntax
+cursor.execute('INSERT INTO "users" (name, age) VALUES (%s, %s) RETURNING id', ("Alice", 25))
+
+# MongoDB — completely different world
+db["users"].insert_one({"name": "Alice", "age": 25})
+```
+
+**With pyflashdb — one line, any database:**
+
+```python
+flash.add("users", {"name": "Alice", "age": 25})
+```
+
+Switch your database by changing one word. Your application code stays exactly the same.
+
+---
+
+## Install
+
+```bash
+# Pick the database you use
+pip install pyflashdb[mysql]      # MySQL
+pip install pyflashdb[postgres]   # PostgreSQL
+pip install pyflashdb[mongodb]    # MongoDB
+pip install pyflashdb[all]        # All three
+```
+
+---
+
+## Quick Example — A Complete User System in 20 Lines
+
+```python
+from flash import FlashDB
+
+# Connect — swap "mysql" for "postgres" or "mongodb" to change databases
+flash = FlashDB("mysql", {
+    "host":     "localhost",
+    "user":     "root",
+    "password": "your_password",
+    "database": "myapp"
+})
+
+# Create the table
+flash.create_table("users", {
+    "id":    "int",
+    "name":  "str",
+    "email": "str",
+    "age":   "int",
+})
+
+# Insert
+flash.add("users", {"name": "Alice", "email": "alice@example.com", "age": 25})
+flash.add("users", {"name": "Bob",   "email": "bob@example.com",   "age": 17})
+
+# Read
+all_users  = flash.all("users")                          # everyone
+adults     = flash.where("users", {"age": {">": 18}})   # filtered
+one_user   = flash.find_one("users", {"name": "Alice"}) # single record
+page       = flash.paginate("users", page=1, size=10)   # paginated
+
+# Update
+flash.update("users", {"name": "Alice"}, {"age": 26})
+
+# Delete
+flash.delete("users", {"name": "Bob"})
+
+flash.close()
+```
+
+---
+
+## Core Features
+
+### Everything you need for database work
+
+| Feature | What it does |
+|---------|-------------|
+| `add()` | Insert one record, returns the new ID |
+| `bulk_insert()` | Insert many records in one call |
+| `all()` | Fetch every record from a table |
+| `where()` | Fetch records matching a filter |
+| `select()` | Full query — filter, sort, limit, offset, specific fields |
+| `find_one()` | Get the first match, or None |
+| `count()` | Count records without fetching them |
+| `paginate()` | Built-in pagination with total count |
+| `update()` | Update matching records |
+| `delete()` | Delete matching records |
+| `create_table()` | Create a table or collection |
+| `drop_table()` | Drop a table or collection |
+| `truncate()` | Clear all rows, keep the structure |
+| `raw()` | Run a raw SQL query or MongoDB command |
+| `begin / commit / rollback` | Full transaction support |
+
+### Smart filter syntax — write once, works everywhere
+
+No SQL, no MongoDB operators. Just a Python dictionary:
+
+```python
+flash.where("users", {"age": {">": 18}})               # greater than
+flash.where("users", {"age": {">=": 18, "<=": 65}})    # range
+flash.where("users", {"role": {"in": ["admin", "mod"]}}) # in list
+flash.where("users", {"email": {"like": "%@gmail.com"}}) # pattern match
+flash.where("users", {"status": {"!=": "banned"}})      # not equal
+```
+
+Flash converts these automatically — to `WHERE age > 18` for SQL, or `{"age": {"$gt": 18}}` for MongoDB. You never touch raw SQL or Mongo syntax.
+
+### Trigger hooks — observe any operation
+
+```python
+@flash.before_insert("users")
+def validate(data):
+    if not data.get("email"):
+        raise ValueError("Email is required")
+
+@flash.after_insert("users")
+def on_created(data, result):
+    print(f"New user created — ID: {result}")
+
+@flash.after_delete("orders")
+def on_deleted(filters, count):
+    print(f"Deleted {count} order(s)")
+```
+
+Hooks work on all three databases including MongoDB, which has no native trigger support. They fire automatically — you never call them manually.
+
+### Transactions — atomic operations
+
+```python
+flash.begin()
+try:
+    flash.update("accounts", {"user_id": 1}, {"balance": 400})
+    flash.update("accounts", {"user_id": 2}, {"balance": 600})
+    flash.commit()
+except Exception as e:
+    flash.rollback()
+```
+
+---
+
+## How pyflashdb Compares
+
+| | pyflashdb | SQLAlchemy | Django ORM | Raw drivers |
+|--|:---------:|:----------:|:----------:|:-----------:|
+| Works on MySQL | ✅ | ✅ | ✅ | ✅ |
+| Works on PostgreSQL | ✅ | ✅ | ✅ | ✅ |
+| Works on MongoDB | ✅ | ❌ | ❌ | ✅ |
+| Same API across all DBs | ✅ | ❌ | ❌ | ❌ |
+| No model classes needed | ✅ | ❌ | ❌ | ✅ |
+| No configuration files | ✅ | ❌ | ❌ | ✅ |
+| Built-in trigger hooks | ✅ | ❌ | ❌ | ❌ |
+| Built-in pagination | ✅ | ❌ | ❌ | ❌ |
+| Learning curve | Low | High | Medium | High |
+| Lines to start | ~5 | ~50 | ~100 | ~20 |
+
+**SQLAlchemy** is powerful but requires defining model classes, learning its own query language, and writing a lot of setup code before you can do anything. It also does not support MongoDB.
+
+**Django ORM** is tightly coupled to the Django framework. You cannot use it in a standalone script or a different framework without pulling in all of Django.
+
+**Raw drivers** (mysql-connector, psycopg2, pymongo) give you full control but require you to write SQL or Mongo syntax yourself, handle connections manually, and rewrite everything when you change databases.
+
+**pyflashdb** sits in the middle — simpler than an ORM, more powerful than raw drivers, and the only option that works the same way across SQL and MongoDB.
+
+---
+
+## Who Should Use It
+
+pyflashdb is built for:
+
+- **Developers building tools, scripts, or internal apps** who want database access without the overhead of a full ORM
+- **Prototypers and startups** who want to move fast and potentially switch databases later without rewriting code
+- **Teams using multiple databases** — SQL for structured data, MongoDB for flexible or document data — in the same project
+- **Python learners** who want to interact with databases without learning SQL syntax first
+- **Data engineers** who need quick read/write access to databases in scripts and pipelines
+
+It is not a replacement for SQLAlchemy or Django ORM in large, complex applications that need advanced query optimization, migrations, and deep database-specific features. For everything else, it is faster to set up and simpler to use.
+
+---
+
+## Scale and Real-World Use
+
+pyflashdb has been designed to handle:
+
+- ✅ Small to medium applications — internal tools, dashboards, admin panels, APIs
+- ✅ Scripts and automation — data imports, exports, scheduled jobs, ETL pipelines
+- ✅ Prototypes and MVPs — get a working database layer in minutes
+- ✅ Multi-database projects — use MySQL and MongoDB side by side with the same API
+- ✅ Microservices — lightweight, no framework dependency, one import and you're done
+
+For each additional database you add to your project, pyflashdb saves you from learning a new driver API, writing new connection management code, and rewriting your query logic. In a project that touches all three databases, that is thousands of lines you never have to write or maintain.
+
+---
+
+## Error Handling
+
+pyflashdb raises clear, named exceptions so you always know what went wrong:
+
+```python
+from flash import FlashDB, FlashConnectionError, QueryError
+
+try:
+    flash = FlashDB("mysql", config)
+except FlashConnectionError as e:
+    print(f"Could not connect: {e}")
+
+try:
+    flash.add("users", data)
+except QueryError as e:
+    print(f"Insert failed: {e}")
+```
+
+---
+
+## Links
+
+- **PyPI:** https://pypi.org/project/pyflashdb/
+- **Issues:** https://github.com/AmanDev17/pyflashdb/issues
+
+---
+
+## Documentation
+📄 [Full Documentation (PDF)](https://github.com/AmanDev17/pyflashdb/blob/main/pyflashdb_v_1.0.4_README.pdf)
+<div align="center">
+
+**pyflashdb v1.0.4** · MIT License · Python 3.8+
+
+*One API. Any database. Zero boilerplate.*
+
+</div>
