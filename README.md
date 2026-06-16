@@ -12,6 +12,7 @@
 [![MySQL](https://img.shields.io/badge/MySQL-supported-00758F?style=flat-square\&logo=mysql\&logoColor=white)](https://www.mysql.com/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-supported-336791?style=flat-square\&logo=postgresql\&logoColor=white)](https://www.postgresql.org/)
 [![MongoDB](https://img.shields.io/badge/MongoDB-supported-3D8B37?style=flat-square\&logo=mongodb\&logoColor=white)](https://www.mongodb.com/)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/pyflashdb?period=total&units=INTERNATIONAL_SYSTEM&left_color=BLACK&right_color=GREEN&left_text=downloads)](https://pepy.tech/projects/pyflashdb)
 
 <br/>
 
